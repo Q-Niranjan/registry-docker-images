@@ -1,3 +1,3 @@
-#!qniranjan01/openg2p-registry-gen2-staff-portal-ui:nsr-demo-2
+#!qniranjan01/openg2p-registry-gen2-staff-portal-ui:dom
 #!openg2p-registry-core-ui/Dockerfile.ui
 #!app
