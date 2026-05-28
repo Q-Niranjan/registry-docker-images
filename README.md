@@ -1,1 +1,1 @@
-# temp-docker-repo
+# registry-docker-images
