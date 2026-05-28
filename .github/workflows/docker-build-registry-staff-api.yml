@@ -3,73 +3,42 @@ name: OpenG2P Registry Staff API Dockers
 on:
   workflow_dispatch:
     inputs:
-      service_file:
-        description: 'Path to the service spec file'
-        required: false
+      image:
+        description: "Docker image tag to push (e.g. user/repo:tag)"
+        required: true
+        default: "openg2p/openg2p-farmer-registry-staff-portal-api:develop"
         type: string
-        default: 'openg2p-registry-staff-api/registry-staff-api-develop.txt'
       dockerfile:
-        description: 'Path to the Dockerfile (optional, defaults to Dockerfile in same dir)'
-        required: false
+        description: "Path to Dockerfile (relative to infra repo root)"
+        required: true
+        default: "openg2p-registry-staff-api/Dockerfile.api"
         type: string
+      context:
+        description: "Docker build context directory"
+        required: true
+        default: "."
+        type: string
+      git_dependencies:
+        description: "Git pip dependencies (one git://tag//url line per row)"
+        required: true
+        type: string
+        default: |
+          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-extensions#subdirectory=openg2p-registry-farmer-extension
+          git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-common
+          git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-auth
+          git://develop//https://github.com/openg2p/openg2p-iam-service#subdirectory=iam-core
+          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-core#subdirectory=openg2p-registry-core
+          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-apis#subdirectory=openg2p-registry-staff-portal-api
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        shell: python
-        env:
-          INPUT_SERVICE_FILE: ${{ inputs.service_file }}
-          INPUT_DOCKERFILE: ${{ inputs.dockerfile }}
-        run: |
-          import os
-          import json
-          import sys
-
-          service_file = os.environ.get('INPUT_SERVICE_FILE', '').strip()
-          dockerfile = os.environ.get('INPUT_DOCKERFILE', '').strip()
-
-          matrix_include = []
-
-          if service_file:
-              # Manual run with specified file
-              name = os.path.basename(service_file).replace('.txt', '')
-              matrix_include.append({
-                  "name": name,
-                  "serviceFile": service_file,
-                  "dockerfile": dockerfile
-              })
-          else:
-              # Default fallback
-              matrix_include.append({
-                  "name": "registry-staff-api",
-                  "serviceFile": "openg2p-registry-staff-api/registry-staff-api-develop.txt",
-                  "dockerfile": "openg2p-registry-staff-api/Dockerfile.api"
-              })
-
-          matrix = {"include": matrix_include}
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"matrix={json.dumps(matrix)}\n")
-
   docker-build:
-    needs: setup
     runs-on: ubuntu-latest
-    name: Docker - ${{ matrix.name }}
+    name: Docker - registry-staff-api
     env:
       OPENG2P_BOT_GITHUB_PAT: ${{ secrets.OPENG2P_BOT_GITHUB_PAT }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -80,150 +49,96 @@ jobs:
           username: ${{ secrets.docker_hub_actor }}
           password: ${{ secrets.docker_hub_token }}
 
-      - name: Diagnostics (token envs, docker, proxy, buildx)
-        shell: bash
-        run: |
-          echo "== GH Actions runtime token envs (masked) =="
-          env | sort | grep -E '^(ACTIONS_|GITHUB_|RUNNER_)' || true
-          echo
-          echo "== Proxy configuration =="
-          env | sort | grep -E '^(HTTP|http|HTTPS|https|NO|no)_PROXY=' || true
-          echo
-          echo "== Docker info =="
-          docker info || true
-          echo
-          echo "== Buildx version =="
-          docker buildx version || true
-          echo
-          echo "== Builder info =="
-          docker buildx ls || true
-
-      - name: Read service file and prepare adapters requirements - ${{ matrix.name }}
+      - name: Prepare build parameters
         id: read
         shell: python
         env:
-          SERVICE_FILE: ${{ matrix.serviceFile }}
-          MATRIX_DOCKERFILE: ${{ matrix.dockerfile }}
+          INPUT_IMAGE: ${{ inputs.image }}
+          INPUT_DOCKERFILE: ${{ inputs.dockerfile }}
+          INPUT_CONTEXT: ${{ inputs.context }}
+          GIT_DEPENDENCIES: ${{ inputs.git_dependencies }}
         run: |
           import os
-          import sys
           import re
           import subprocess
           from datetime import datetime
 
-          service_file = os.environ['SERVICE_FILE']
-          matrix_dockerfile = os.environ.get('MATRIX_DOCKERFILE', '')
+          image_id = os.environ["INPUT_IMAGE"].strip()
+          dockerfile = os.environ["INPUT_DOCKERFILE"].strip()
+          context = os.environ.get("INPUT_CONTEXT", ".").strip() or "."
 
-          if not os.path.exists(service_file):
-              print(f"Service file not found: {service_file}", file=sys.stderr)
-              sys.exit(1)
-
-          with open(service_file, 'r') as f:
-              lines = [line.strip() for line in f if line.strip()]
-
-          if not lines or not lines[0].startswith('#!'):
-              print("Invalid file format: First line must start with #!IMAGE_ID", file=sys.stderr)
-              sys.exit(1)
-
-          # Line 1: Image ID
-          image_id = lines[0].lstrip('#!').strip()
-
-          # Dockerfile resolution
-          dockerfile = matrix_dockerfile
+          if not image_id:
+              raise SystemExit("image input is required")
           if not dockerfile:
-              # Default to Dockerfile in the same directory as service_file
-              service_dir = os.path.dirname(service_file)
-              candidate = os.path.join(service_dir, 'Dockerfile')
-              # We can't check if it exists here because we haven't checked out the code yet in the setup job,
-              # but this script runs in the build job where code IS checked out.
-              # So checking existence is good practice.
-              if os.path.exists(candidate):
-                  dockerfile = candidate
+              raise SystemExit("dockerfile input is required")
+          if not os.path.exists(dockerfile):
+              raise SystemExit(f"Dockerfile not found: {dockerfile}")
 
-          # Fallback to legacy check: line 2 starts with #!
-          if not dockerfile and len(lines) > 1 and lines[1].startswith('#!'):
-              dockerfile = lines[1].lstrip('#!').strip()
-
-          if not dockerfile:
-              # Final attempt: assume Dockerfile in current dir if service file has no path?
-              # Or just fail.
-              print(f"Dockerfile path not found. Checked matrix input, same dir as {service_file}, and file header.", file=sys.stderr)
-              sys.exit(1)
-
-          # Parse dependencies
           deps = []
           repo_url = ""
           git_branch = ""
-          
-          for line in lines:
-              if line.startswith('#!'): continue
-              if line.startswith('#'): continue
 
-              val = line.strip()
+          for raw in os.environ.get("GIT_DEPENDENCIES", "").splitlines():
+              line = raw.strip()
+              if not line or line.startswith("#"):
+                  continue
 
-              # Parse git://TAG//URL
-              m = re.match(r'git://([^/]+)//(.+)', val)
+              m = re.match(r"git://([^/]+)//(.+)", line)
               if m:
                   tag = m.group(1)
                   url_full = m.group(2)
                   if not repo_url:
                       repo_url = url_full
                       git_branch = tag
-                      
-                  if '#' in url_full:
-                      base, frag = url_full.split('#', 1)
+
+                  if "#" in url_full:
+                      base, frag = url_full.split("#", 1)
                       req = f"git+{base}@{tag}#{frag}"
                   else:
                       req = f"git+{url_full}@{tag}"
                   deps.append(req)
               else:
-                  if val:
-                      deps.append(val)
+                  deps.append(line)
 
-          # Write requirements file
-          with open('adapters.requirements.txt', 'w') as f:
-              f.write('\n'.join(deps))
+          if not deps:
+              raise SystemExit("At least one git dependency line is required")
+
+          with open("adapters.requirements.txt", "w") as f:
+              f.write("\n".join(deps))
 
           print("---- adapters.requirements.txt ----")
-          print('\n'.join(deps))
+          print("\n".join(deps))
           print("----------------------------------")
 
-          # Git info
           try:
-              commit_hash = subprocess.check_output(['git', '--no-pager', 'log', '-1', '--pretty=format:%H']).decode('utf-8').strip()
-          except:
+              commit_hash = subprocess.check_output(
+                  ["git", "--no-pager", "log", "-1", "--pretty=format:%H"]
+              ).decode().strip()
+          except Exception:
               commit_hash = "unknown"
 
           created = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-
-          # Labels
-          vendor = image_id.split('/')[0] if '/' in image_id else "unknown"
-          # title: take second part, split by :
+          vendor = image_id.split("/")[0] if "/" in image_id else "unknown"
           try:
-              title = image_id.split('/')[1].split(':')[0]
-          except:
+              title = image_id.split("/")[1].split(":")[0]
+          except Exception:
               title = image_id
+          version = image_id.split(":")[-1] if ":" in image_id else "latest"
 
-          version = "latest"
-          if ':' in image_id:
-              version = image_id.split(':')[-1]
+          github_output = os.environ["GITHUB_OUTPUT"]
+          with open(github_output, "a") as f:
+              f.write(f"image={image_id}\n")
+              f.write(f"dockerfile={dockerfile}\n")
+              f.write(f"context={context}\n")
+              f.write(f"created={created}\n")
+              f.write(f"commit={commit_hash}\n")
+              f.write(f"vendor={vendor}\n")
+              f.write(f"title={title}\n")
+              f.write(f"version={version}\n")
+              f.write(f"repo_url={repo_url}\n")
+              f.write(f"git_branch={git_branch}\n")
 
-          # Write to GITHUB_OUTPUT
-          github_output = os.environ.get('GITHUB_OUTPUT')
-          if github_output:
-              with open(github_output, 'a') as f:
-                  f.write(f"image={image_id}\n")
-                  f.write(f"dockerfile={dockerfile}\n")
-                  f.write(f"context=.\n")
-                  f.write(f"created={created}\n")
-                  f.write(f"commit={commit_hash}\n")
-                  f.write(f"vendor={vendor}\n")
-                  f.write(f"title={title}\n")
-                  f.write(f"version={version}\n")
-                  f.write(f"repo_url={repo_url}\n")
-                  f.write(f"git_branch={git_branch}\n")
-
-      - name: Build and push - ${{ matrix.name }}
+      - name: Build and push - registry-staff-api
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.read.outputs.context }}
@@ -244,4 +159,4 @@ jobs:
             org.opencontainers.image.vendor=${{ steps.read.outputs.vendor }}
             org.opencontainers.image.title=${{ steps.read.outputs.title }}
             org.opencontainers.image.description=OpenG2P Registry Gen2 service image
-            org.openg2p.service.name=${{ matrix.name }}
+            org.openg2p.service.name=registry-staff-api
