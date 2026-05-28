@@ -8,13 +8,21 @@ on:
         required: true
         default: "develop"
         type: string
-      service_file:
-        description: "Service definition file"
+      image:
+        description: "Docker image tag to push (e.g. user/repo:tag)"
         required: true
-        default: "openg2p-registry-staff-ui/registry-staff-ui-develop.txt"
-        type: choice
-        options:
-          - openg2p-registry-staff-ui/registry-staff-ui-develop.txt
+        default: "qniranjan01/openg2p-registry-gen2-staff-portal-ui:develop"
+        type: string
+      dockerfile:
+        description: "Path to Dockerfile (relative to infra repo root)"
+        required: true
+        default: "openg2p-registry-staff-ui/Dockerfile.ui"
+        type: string
+      context:
+        description: "Docker build context directory"
+        required: true
+        default: "app"
+        type: string
 
 jobs:
   docker-build:
@@ -45,33 +53,18 @@ jobs:
           password: ${{ secrets.docker_hub_token }}
 
     
-      - name: Read service file
+      - name: Set build parameters
         id: read
         shell: bash
         run: |
           set -euo pipefail
-          file="${{ inputs.service_file }}"
-          [ -f "$file" ] || { echo "Service file not found: $file" >&2; exit 1; }
-
-          mapfile -t LINES < <(awk '
-            {
-              s=$0
-              sub(/^[[:space:]]*#!/,"",s)
-              if (s ~ /^[[:space:]]*#/) next
-              if (s ~ /^[[:space:]]*$/) next
-              print s
-            }' "$file")
-
-          IMAGE_ID="${LINES[0]}"
-          DOCKERFILE="${LINES[1]}"
-          CONTEXT="${LINES[2]:-app}"
 
           COMMIT_HASH=$(git --no-pager log -1 --pretty=format:%H)
           CREATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          echo "image=$IMAGE_ID" >> "$GITHUB_OUTPUT"
-          echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
-          echo "context=$CONTEXT" >> "$GITHUB_OUTPUT"
+          echo "image=${{ inputs.image }}" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=${{ inputs.dockerfile }}" >> "$GITHUB_OUTPUT"
+          echo "context=${{ inputs.context }}" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT_HASH" >> "$GITHUB_OUTPUT"
           echo "created=$CREATED" >> "$GITHUB_OUTPUT"
 

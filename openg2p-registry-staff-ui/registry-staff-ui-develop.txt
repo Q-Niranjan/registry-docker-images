@@ -1,4 +1,0 @@
-#!qniranjan01/openg2p-registry-gen2-staff-portal-ui:develop
-#!openg2p-registry-staff-ui/Dockerfile.ui
-#!app
-
