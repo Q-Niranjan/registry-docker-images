@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       source_branch:
-        description: "Source repository branch/tag to build"
+        description: "Source repo and branch/tag (owner/repo@ref)"
         required: true
-        default: "develop"
+        default: "Q-Niranjan/openg2p-registry-gen2-staff-portal-ui@develop"
         type: string
       image:
         description: "Docker image tag to push (e.g. user/repo:tag)"
@@ -34,12 +34,35 @@ jobs:
       - name: Checkout infra repo
         uses: actions/checkout@v4
 
-   
+      - name: Parse source repository
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          input="${{ inputs.source_branch }}"
+
+          if [[ "$input" =~ ^([^@#]+)[@#](.+)$ ]]; then
+            repo="${BASH_REMATCH[1]}"
+            ref="${BASH_REMATCH[2]}"
+          elif [[ "$input" =~ ^([^/]+/[^/]+):(.+)$ ]]; then
+            repo="${BASH_REMATCH[1]}"
+            ref="${BASH_REMATCH[2]}"
+          elif [[ "$input" =~ ^[^/]+/[^/]+$ ]]; then
+            repo="$input"
+            ref="develop"
+          else
+            echo "Invalid source_branch. Use owner/repo@ref (e.g. Q-Niranjan/openg2p-registry-gen2-staff-portal-ui@develop)" >&2
+            exit 1
+          fi
+
+          echo "repository=$repo" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
       - name: Checkout core-ui source
         uses: actions/checkout@v4
         with:
-          repository: Q-Niranjan/openg2p-registry-gen2-staff-portal-ui
-          ref: ${{ inputs.source_branch }}
+          repository: ${{ steps.source.outputs.repository }}
+          ref: ${{ steps.source.outputs.ref }}
           path: app
 
 
