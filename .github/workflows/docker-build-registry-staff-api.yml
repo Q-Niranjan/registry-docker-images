@@ -18,17 +18,41 @@ on:
         required: true
         default: "."
         type: string
-      git_dependencies:
-        description: "Git pip dependencies (one git://tag//url line per row)"
+      git_dep_1:
+        description: "Git dependency 1 — farmer extension"
         required: true
         type: string
-        default: |
-          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-extensions#subdirectory=openg2p-registry-farmer-extension
-          git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-common
-          git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-auth
-          git://develop//https://github.com/openg2p/openg2p-iam-service#subdirectory=iam-core
-          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-core#subdirectory=openg2p-registry-core
-          git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-apis#subdirectory=openg2p-registry-staff-portal-api
+        default: "git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-extensions#subdirectory=openg2p-registry-farmer-extension"
+      git_dep_2:
+        description: "Git dependency 2 — fastapi-common"
+        required: true
+        type: string
+        default: "git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-common"
+      git_dep_3:
+        description: "Git dependency 3 — fastapi-auth"
+        required: true
+        type: string
+        default: "git://v1.1.6//https://github.com/openg2p/openg2p-fastapi-common#subdirectory=openg2p-fastapi-auth"
+      git_dep_4:
+        description: "Git dependency 4 — iam-core"
+        required: true
+        type: string
+        default: "git://develop//https://github.com/openg2p/openg2p-iam-service#subdirectory=iam-core"
+      git_dep_5:
+        description: "Git dependency 5 — registry-core"
+        required: true
+        type: string
+        default: "git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-core#subdirectory=openg2p-registry-core"
+      git_dep_6:
+        description: "Git dependency 6 — staff-portal-api"
+        required: true
+        type: string
+        default: "git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-apis#subdirectory=openg2p-registry-staff-portal-api"
+      git_dep_extra:
+        description: "Extra git deps (optional; separate multiple with semicolons)"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   docker-build:
@@ -56,7 +80,13 @@ jobs:
           INPUT_IMAGE: ${{ inputs.image }}
           INPUT_DOCKERFILE: ${{ inputs.dockerfile }}
           INPUT_CONTEXT: ${{ inputs.context }}
-          GIT_DEPENDENCIES: ${{ inputs.git_dependencies }}
+          GIT_DEP_1: ${{ inputs.git_dep_1 }}
+          GIT_DEP_2: ${{ inputs.git_dep_2 }}
+          GIT_DEP_3: ${{ inputs.git_dep_3 }}
+          GIT_DEP_4: ${{ inputs.git_dep_4 }}
+          GIT_DEP_5: ${{ inputs.git_dep_5 }}
+          GIT_DEP_6: ${{ inputs.git_dep_6 }}
+          GIT_DEP_EXTRA: ${{ inputs.git_dep_extra }}
         run: |
           import os
           import re
@@ -74,13 +104,22 @@ jobs:
           if not os.path.exists(dockerfile):
               raise SystemExit(f"Dockerfile not found: {dockerfile}")
 
+          raw_lines = []
+          for key in ("GIT_DEP_1", "GIT_DEP_2", "GIT_DEP_3", "GIT_DEP_4", "GIT_DEP_5", "GIT_DEP_6"):
+              line = os.environ.get(key, "").strip()
+              if line:
+                  raw_lines.append(line)
+
+          extra = os.environ.get("GIT_DEP_EXTRA", "").strip()
+          if extra:
+              raw_lines.extend(part.strip() for part in extra.split(";") if part.strip())
+
           deps = []
           repo_url = ""
           git_branch = ""
 
-          for raw in os.environ.get("GIT_DEPENDENCIES", "").splitlines():
-              line = raw.strip()
-              if not line or line.startswith("#"):
+          for line in raw_lines:
+              if line.startswith("#"):
                   continue
 
               m = re.match(r"git://([^/]+)//(.+)", line)
@@ -101,7 +140,7 @@ jobs:
                   deps.append(line)
 
           if not deps:
-              raise SystemExit("At least one git dependency line is required")
+              raise SystemExit("At least one git dependency is required")
 
           with open("adapters.requirements.txt", "w") as f:
               f.write("\n".join(deps))
