@@ -6,7 +6,7 @@ on:
       image:
         description: "Docker image tag to push (e.g. user/repo:tag)"
         required: true
-        default: "qniranjan01/openg2p-farmer-registry-staff-portal-api:develop"
+        default: "qniranjan01/registry-platform-staff-api-farmer-registry:develop"
         type: string
       dockerfile:
         description: "Path to Dockerfile (relative to infra repo root)"

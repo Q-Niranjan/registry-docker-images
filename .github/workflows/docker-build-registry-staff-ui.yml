@@ -11,12 +11,12 @@ on:
       image:
         description: "Docker image tag to push (e.g. user/repo:tag)"
         required: true
-        default: "openg2p/openg2p-registry-staff-portal-ui:develop"
+        default: "qniranjan01/registry-platform-staff-ui:develop"
         type: string
       dockerfile:
         description: "Path to Dockerfile (relative to infra repo root)"
         required: true
-        default: "app/ui/staff-portal-ui/Dockerfile"
+        default: "openg2p-registry-staff-ui/Dockerfile.ui"
         type: string
       context:
         description: "Docker build context directory"
