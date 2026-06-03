@@ -39,15 +39,15 @@ on:
         type: string
         default: "git://develop//https://github.com/openg2p/openg2p-iam-service#subdirectory=iam-core"
       git_dep_5:
-        description: "Git dependency 5 — registry-core"
+        description: "Git dependency 5 — registry-core (registry-platform)"
         required: true
         type: string
-        default: "git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-core#subdirectory=openg2p-registry-core"
+        default: "git://develop//https://github.com/Q-Niranjan/registry-platform#subdirectory=core/openg2p-registry-core"
       git_dep_6:
-        description: "Git dependency 6 — staff-portal-api"
+        description: "Git dependency 6 — staff-portal-api (registry-platform)"
         required: true
         type: string
-        default: "git://develop//https://github.com/Q-Niranjan/openg2p-registry-gen2-apis#subdirectory=openg2p-registry-staff-portal-api"
+        default: "git://develop//https://github.com/Q-Niranjan/registry-platform#subdirectory=apis/openg2p-registry-staff-portal-api"
       git_dep_extra:
         description: "Extra git deps (optional; separate multiple with semicolons)"
         required: false

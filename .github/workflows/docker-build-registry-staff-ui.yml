@@ -6,22 +6,22 @@ on:
       source_branch:
         description: "Source repo and branch/tag (owner/repo@ref)"
         required: true
-        default: "Q-Niranjan/openg2p-registry-gen2-staff-portal-ui@develop"
+        default: "Q-Niranjan/registry-platform@develop"
         type: string
       image:
         description: "Docker image tag to push (e.g. user/repo:tag)"
         required: true
-        default: "qniranjan01/openg2p-registry-gen2-staff-portal-ui:develop"
+        default: "openg2p/openg2p-registry-staff-portal-ui:develop"
         type: string
       dockerfile:
         description: "Path to Dockerfile (relative to infra repo root)"
         required: true
-        default: "openg2p-registry-staff-ui/Dockerfile.ui"
+        default: "app/ui/staff-portal-ui/Dockerfile"
         type: string
       context:
         description: "Docker build context directory"
         required: true
-        default: "app"
+        default: "app/ui/staff-portal-ui"
         type: string
 
 jobs:
@@ -51,20 +51,19 @@ jobs:
             repo="$input"
             ref="develop"
           else
-            echo "Invalid source_branch. Use owner/repo@ref (e.g. Q-Niranjan/openg2p-registry-gen2-staff-portal-ui@develop)" >&2
+            echo "Invalid source_branch. Use owner/repo@ref (e.g. Q-Niranjan/registry-platform@develop)" >&2
             exit 1
           fi
 
           echo "repository=$repo" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout core-ui source
+      - name: Checkout registry-platform source
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.source.outputs.repository }}
           ref: ${{ steps.source.outputs.ref }}
           path: app
-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -75,41 +74,42 @@ jobs:
           username: ${{ secrets.docker_hub_actor }}
           password: ${{ secrets.docker_hub_token }}
 
-    
       - name: Set build parameters
         id: read
         shell: bash
         run: |
           set -euo pipefail
 
-          COMMIT_HASH=$(git --no-pager log -1 --pretty=format:%H)
+          COMMIT_HASH=$(git -C app --no-pager log -1 --pretty=format:%H)
           CREATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          IMAGE="${{ inputs.image }}"
+          VERSION="${IMAGE##*:}"
 
-          echo "image=${{ inputs.image }}" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "dockerfile=${{ inputs.dockerfile }}" >> "$GITHUB_OUTPUT"
           echo "context=${{ inputs.context }}" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT_HASH" >> "$GITHUB_OUTPUT"
           echo "created=$CREATED" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_repo=${{ steps.source.outputs.repository }}" >> "$GITHUB_OUTPUT"
 
- 
       - name: Build and push - registry-staff-ui
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.read.outputs.context }}
           file: ${{ steps.read.outputs.dockerfile }}
           push: true
-
           platforms: linux/amd64
-
           tags: ${{ steps.read.outputs.image }}
-
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
           labels: |
             org.opencontainers.image.created=${{ steps.read.outputs.created }}
             org.opencontainers.image.authors=${{ github.repository_owner }}
-            org.opencontainers.image.source=${{ github.repository }}@${{ steps.read.outputs.commit }}
+            org.opencontainers.image.source=${{ steps.read.outputs.source_repo }}@${{ steps.read.outputs.commit }}
             org.opencontainers.image.revision=${{ steps.read.outputs.commit }}
-            org.opencontainers.image.description=OpenG2P Registry Gen2 service image
+            org.opencontainers.image.version=${{ steps.read.outputs.version }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.title=openg2p-registry-staff-portal-ui
+            org.opencontainers.image.description=OpenG2P Registry Staff Portal UI
             org.openg2p.service.name=registry-staff-ui
